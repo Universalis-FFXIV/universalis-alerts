@@ -1,8 +1,10 @@
+#![feature(iter_intersperse)]
 use std::io::Cursor;
 
 use bson::Document;
 use error_chain::error_chain;
 use futures_util::{pin_mut, SinkExt, StreamExt};
+use itertools::Itertools;
 use mysql_async::{params, prelude::*, Pool};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -83,13 +85,13 @@ struct UserAlert {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-enum TriggerReason {
+enum TriggerCondition {
     PriceLessThan { unit_price: i32 },
 }
 
 #[derive(Deserialize, Debug, Clone)]
 struct AlertTrigger {
-    reasons: Vec<TriggerReason>,
+    conditions: Vec<TriggerCondition>,
 }
 
 async fn get_item(id: i32, client: &Client) -> Result<Item> {
@@ -152,15 +154,41 @@ async fn main() -> Result<()> {
             let mut reader = Cursor::new(data.clone());
             let document = Document::from_reader(&mut reader).unwrap();
             let ev: ListingsAddEvent = bson::from_bson(document.into()).unwrap();
-            
+
+            let min_price = ev.listings.into_iter().map(|l| l.unit_price).min().unwrap_or_default();
+
             let alerts = get_alerts_for_world_item(ev.world_id, 5, &pool).await.unwrap();
-            for (alert, _) in alerts {
+            for (alert, trigger) in alerts {
+                // Check if all trigger conditions are met
+                let matched_conditions = trigger.conditions
+                    .clone()
+                    .into_iter()
+                    .filter(|condition| {
+                        match condition {
+                            TriggerCondition::PriceLessThan { unit_price } => {
+                                min_price != 0 && min_price < unit_price.clone()
+                            }
+                        }
+                    })
+                    .collect_vec();
+                if matched_conditions.len() < trigger.conditions.len() {
+                    continue
+                }
+
+                // Format conditions
+                let formatted_confitions = matched_conditions.into_iter().map(|condition| {
+                    match condition {
+                        TriggerCondition::PriceLessThan { unit_price } => format!("Unit price is less than {}", unit_price)
+                    }
+                });
+                let formatted_conditions = Itertools::intersperse(formatted_confitions, "\n".to_string()).collect::<String>();
+
                 // send webhook message
                 let item = get_item(ev.item_id, &client).await.unwrap();
                 let market_url = format!("https://universalis.app/market/{}", ev.item_id);
                 let discord_webhook = alert.discord_webhook.unwrap();
                 let embed_title = format!("Alert triggered for {}", item.name);
-                let embed_description = format!("One of your alerts has been triggered for the following reason(s):\n```c\nreasons\n```\nYou can view the item page on Universalis by clicking [this link]({}).", market_url);
+                let embed_description = format!("One of your alerts has been triggered for the following reason(s):\n```c\n{}\n```\nYou can view the item page on Universalis by clicking [this link]({}).", formatted_conditions, market_url);
                 let payload = DiscordWebhookPayload {
                     embeds: [DiscordEmbed {
                         url: &market_url,
