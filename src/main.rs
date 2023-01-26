@@ -237,6 +237,10 @@ async fn get_alerts_for_world_item(
     Ok(alerts)
 }
 
+fn get_universalis_url(item_id: i32) -> String {
+    format!("https://universalis.app/market/{}", item_id)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let database_url = "mysql://dalamud:dalamud@localhost:4003/dalamud";
@@ -278,7 +282,7 @@ async fn main() -> Result<()> {
 
                 // send webhook message
                 let item = get_item(ev.item_id, &client).await.unwrap();
-                let market_url = format!("https://universalis.app/market/{}", ev.item_id);
+                let market_url = get_universalis_url(ev.item_id);
                 let discord_webhook = alert.discord_webhook.unwrap();
                 let embed_title = format!("Alert triggered for {}", item.name);
                 let embed_description = format!("One of your alerts has been triggered for the following reason(s):\n```c\n{}\n\nValue: {}```\nYou can view the item page on Universalis by clicking [this link]({}).", trigger, trigger_result.unwrap(), market_url);
