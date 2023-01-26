@@ -80,6 +80,16 @@ impl TriggerReduceOp<f32> for TriggerReducer {
     }
 }
 
+impl Display for TriggerReducer {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            Self::Min => f.write_str("Min"),
+            Self::Max => f.write_str("Max"),
+            Self::Mean => f.write_str("Mean"),
+        }
+    }
+}
+
 #[derive(Deserialize, Debug, Clone)]
 enum Comparison {
     #[serde(rename = "lt")]
@@ -135,15 +145,12 @@ impl AlertTrigger {
 
 impl Display for AlertTrigger {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        let formatted_filters = self
-            .filters
-            .iter()
-            .map(|filter| format!("{}", filter));
+        let formatted_filters = self.filters.iter().map(|filter| format!("{}", filter));
         let formatted_filters =
             Itertools::intersperse(formatted_filters, "\n".to_string()).collect::<String>();
         f.write_fmt(format_args!(
-            "{}\n\nField: {}\nComparison: {}",
-            formatted_filters, self.mapper, self.comparison
+            "{}\n\nField: {}\nStat: {}\nComparison: {}",
+            formatted_filters, self.mapper, self.reducer, self.comparison
         ))
     }
 }
