@@ -5,7 +5,8 @@ use itertools::Itertools;
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Clone)]
-pub enum TriggerFilter {
+enum TriggerFilter {
+    #[serde(rename = "hq")]
     Hq,
 }
 
@@ -21,8 +22,17 @@ impl TriggerFilterOp<Listing> for TriggerFilter {
     }
 }
 
+impl Display for TriggerFilter {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            Self::Hq => f.write_str("Item is HQ"),
+        }
+    }
+}
+
 #[derive(Deserialize, Debug, Clone)]
-pub enum TriggerMapper {
+enum TriggerMapper {
+    #[serde(rename = "pricePerUnit")]
     UnitPrice,
 }
 
@@ -30,10 +40,10 @@ trait TriggerMapOp<TItem, TResult> {
     fn evaluate(&self, item: &TItem) -> TResult;
 }
 
-impl TriggerMapOp<Listing, i32> for TriggerMapper {
-    fn evaluate(&self, listing: &Listing) -> i32 {
+impl TriggerMapOp<Listing, f32> for TriggerMapper {
+    fn evaluate(&self, listing: &Listing) -> f32 {
         match self {
-            Self::UnitPrice => listing.unit_price,
+            Self::UnitPrice => listing.unit_price as f32,
         }
     }
 }
@@ -47,35 +57,46 @@ impl Display for TriggerMapper {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-pub enum TriggerReducer {
+enum TriggerReducer {
+    #[serde(rename = "min")]
     Min,
+    #[serde(rename = "max")]
+    Max,
+    #[serde(rename = "max")]
+    Mean,
 }
 
 trait TriggerReduceOp<T> {
     fn evaluate(&self, accum: &T, item: &T) -> T;
 }
 
-impl TriggerReduceOp<i32> for TriggerReducer {
-    fn evaluate(&self, accum: &i32, item: &i32) -> i32 {
+impl TriggerReduceOp<f32> for TriggerReducer {
+    fn evaluate(&self, accum: &f32, item: &f32) -> f32 {
         match self {
             Self::Min => (*accum).min(*item),
+            Self::Max => (*accum).max(*item),
+            Self::Mean => (*accum + *item) / 2.0,
         }
     }
 }
 
 #[derive(Deserialize, Debug, Clone)]
-pub enum Comparison {
-    LessThan { target: i32 },
+enum Comparison {
+    #[serde(rename = "lt")]
+    LessThan { target: f32 },
+    #[serde(rename = "gt")]
+    GreaterThan { target: f32 },
 }
 
 trait ComparisonOp<T> {
     fn evaluate(&self, value: &T) -> bool;
 }
 
-impl ComparisonOp<i32> for Comparison {
-    fn evaluate(&self, value: &i32) -> bool {
+impl ComparisonOp<f32> for Comparison {
+    fn evaluate(&self, value: &f32) -> bool {
         match self {
             Self::LessThan { target } => *value < *target,
+            Self::GreaterThan { target } => *value > *target,
         }
     }
 }
@@ -84,6 +105,7 @@ impl Display for Comparison {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         match self {
             Self::LessThan { target } => f.write_fmt(format_args!("Less than {}", target)),
+            Self::GreaterThan { target } => f.write_fmt(format_args!("Greater than {}", target)),
         }
     }
 }
@@ -97,7 +119,7 @@ pub struct AlertTrigger {
 }
 
 impl AlertTrigger {
-    pub fn evaluate(&self, listings: &[Listing]) -> Option<i32> {
+    pub fn evaluate(&self, listings: &[Listing]) -> Option<f32> {
         listings
             .into_iter()
             // Execute all filters on each listing
@@ -113,14 +135,16 @@ impl AlertTrigger {
 
 impl Display for AlertTrigger {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        let formatted_trigger = self.filters.clone().into_iter().map(|filter| match filter {
-            TriggerFilter::Hq => "Item is HQ".to_string(),
-        });
-        let formatted_trigger =
-            Itertools::intersperse(formatted_trigger, "\n".to_string()).collect::<String>();
+        let formatted_filters = self
+            .filters
+            .clone()
+            .into_iter()
+            .map(|filter| format!("{}", filter));
+        let formatted_filters =
+            Itertools::intersperse(formatted_filters, "\n".to_string()).collect::<String>();
         f.write_fmt(format_args!(
             "{}\n\nField: {}\nComparison: {}",
-            formatted_trigger, self.mapper, self.comparison
+            formatted_filters, self.mapper, self.comparison
         ))
     }
 }

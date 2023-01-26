@@ -77,7 +77,7 @@ async fn send_discord_message(
     item_id: i32,
     alert: &UserAlert,
     trigger: &AlertTrigger,
-    trigger_result: i32,
+    trigger_result: f32,
     client: &Client,
 ) -> Result<()> {
     let item = get_item(item_id, &client).await?;
