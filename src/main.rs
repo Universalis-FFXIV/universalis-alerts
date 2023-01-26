@@ -27,6 +27,9 @@ error_chain! {
     }
 }
 
+const MIN_TRIGGER_VERSION: i32 = 0;
+const MAX_TRIGGER_VERSION: i32 = 0;
+
 #[derive(Deserialize, Debug, Clone)]
 struct Item {
     #[serde(rename = "Name")]
@@ -53,9 +56,11 @@ async fn get_alerts_for_world_item(
     pool: &Pool,
 ) -> Result<Vec<(UserAlert, AlertTrigger)>> {
     let mut conn = pool.get_conn().await?;
-    let alerts = r"SELECT `discord_webhook`, `trigger` FROM `users_alerts_next` WHERE `world_id` = :world_id AND `item_id` = :item_id".with(params! {
+    let alerts = r"SELECT `discord_webhook`, `trigger` FROM `users_alerts_next` WHERE `world_id` = :world_id AND `item_id` = :item_id AND `trigger_version` >= :min_trigger_version AND `trigger_version` <= :max_trigger_version".with(params! {
         "world_id" => world_id,
         "item_id" => item_id,
+        "min_trigger_version" => MIN_TRIGGER_VERSION,
+        "max_trigger_version" => MAX_TRIGGER_VERSION,
     })
         .map(&mut conn, |(discord_webhook, trigger)| {
             let alert = UserAlert {
