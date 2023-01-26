@@ -62,7 +62,7 @@ enum TriggerReducer {
     Min,
     #[serde(rename = "max")]
     Max,
-    #[serde(rename = "max")]
+    #[serde(rename = "mean")]
     Mean,
 }
 
@@ -123,7 +123,7 @@ impl AlertTrigger {
         listings
             .into_iter()
             // Execute all filters on each listing
-            .filter(|l| self.filters.clone().into_iter().all(|f| f.evaluate(l)))
+            .filter(|l| self.filters.iter().all(|f| f.evaluate(l)))
             // Map each listing to a scalar
             .map(|l| self.mapper.evaluate(l))
             // Execute the specified reducer
@@ -137,8 +137,7 @@ impl Display for AlertTrigger {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         let formatted_filters = self
             .filters
-            .clone()
-            .into_iter()
+            .iter()
             .map(|filter| format!("{}", filter));
         let formatted_filters =
             Itertools::intersperse(formatted_filters, "\n".to_string()).collect::<String>();
