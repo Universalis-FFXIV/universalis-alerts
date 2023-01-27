@@ -1,3 +1,4 @@
+use std::env;
 use std::io::Cursor;
 
 use crate::discord::*;
@@ -24,6 +25,7 @@ error_chain! {
         Bson(bson::ser::Error);
         Json(serde_json::Error);
         Database(mysql_async::Error);
+        Env(std::env::VarError);
     }
 }
 
@@ -127,13 +129,12 @@ async fn main() -> Result<()> {
     // TODO: Enable tokio tracing
     // TODO: Add metrics
     // TODO: Add logging
+    // TODO: Log failures instead of just yeeting errors
 
-    // TODO: Make this env
-    let database_url = "mysql://dalamud:dalamud@localhost:4003/dalamud";
-    let pool = Pool::new(database_url);
+    let database_url = env::var("UNIVERSALIS_ALERTS_DB")?;
+    let pool = Pool::new(database_url.as_str());
 
-    // TODO: Make this env
-    let connect_addr = "wss://universalis.app/api/ws";
+    let connect_addr = env::var("UNIVERSALIS_ALERTS_WS")?;
     let url = url::Url::parse(&connect_addr)?;
 
     // TODO: Attempt to reconnect when the connection drops?
@@ -144,8 +145,7 @@ async fn main() -> Result<()> {
 
     let event = SubscribeEvent {
         event: "subscribe",
-        // TODO: Make this env
-        channel: "listings/add{world=74}",
+        channel: &env::var("UNIVERSALIS_ALERTS_CHANNEL")?,
     };
     let serialized = bson::to_bson(&event)?;
     let mut v: Vec<u8> = Vec::new();
@@ -174,7 +174,7 @@ async fn main() -> Result<()> {
                     continue;
                 }
 
-                // send webhook message
+                // Send webhook message
                 send_discord_message(
                     ev.item_id,
                     &alert,

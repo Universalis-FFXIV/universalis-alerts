@@ -2,3 +2,5 @@
 devenv
 target
 .gitignore
+.env
+.env*.local
