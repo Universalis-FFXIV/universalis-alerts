@@ -43,7 +43,8 @@ trait TriggerMapOp<TItem, TResult> {
 impl TriggerMapOp<Listing, f32> for TriggerMapper {
     fn evaluate(&self, listing: &Listing) -> f32 {
         match self {
-            Self::UnitPrice => listing.unit_price as f32,
+            // Apply GST
+            Self::UnitPrice => (listing.unit_price as f32 * 1.05).ceil(),
         }
     }
 }
