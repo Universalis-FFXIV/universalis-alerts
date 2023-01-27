@@ -66,16 +66,26 @@ enum TriggerReducer {
     Mean,
 }
 
+struct ReducerContext<T> {
+    stack: Vec<T>,
+}
+
 trait TriggerReduceOp<T> {
-    fn evaluate(&self, accum: &T, item: &T) -> T;
+    fn evaluate(&self, context: &mut ReducerContext<T>, accum: &T, item: &T) -> T;
 }
 
 impl TriggerReduceOp<f32> for TriggerReducer {
-    fn evaluate(&self, accum: &f32, item: &f32) -> f32 {
+    fn evaluate(&self, context: &mut ReducerContext<f32>, accum: &f32, item: &f32) -> f32 {
         match self {
             Self::Min => (*accum).min(*item),
             Self::Max => (*accum).max(*item),
-            Self::Mean => (*accum + *item) / 2.0,
+            Self::Mean => {
+                // The initial accumulator value is the first element
+                // of the iterator, so n should begin at 1.
+                let n = context.stack.pop().unwrap_or(1.0);
+                context.stack.push(n + 1.0);
+                (n * *accum + *item) / (n + 1.0)
+            }
         }
     }
 }
@@ -130,6 +140,7 @@ pub struct AlertTrigger {
 
 impl AlertTrigger {
     pub fn evaluate(&self, listings: &[Listing]) -> Option<f32> {
+        let mut context = ReducerContext::<f32> { stack: Vec::new() };
         listings
             .into_iter()
             // Execute all filters on each listing
@@ -137,7 +148,7 @@ impl AlertTrigger {
             // Map each listing to a scalar
             .map(|l| self.mapper.evaluate(l))
             // Execute the specified reducer
-            .reduce(|accum, item| self.reducer.evaluate(&accum, &item))
+            .reduce(|accum, item| self.reducer.evaluate(&mut context, &accum, &item))
             // Check if the result satisfies the final comparison
             .filter(|result| self.comparison.evaluate(result))
     }
