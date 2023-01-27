@@ -55,6 +55,7 @@ async fn get_alerts_for_world_item(
     item_id: i32,
     pool: &Pool,
 ) -> Result<Vec<(UserAlert, AlertTrigger)>> {
+    // TODO: Add caching for this?
     let mut conn = pool.get_conn().await?;
     let alerts = r"SELECT `discord_webhook`, `trigger` FROM `users_alerts_next` WHERE `world_id` = :world_id AND `item_id` = :item_id AND `trigger_version` >= :min_trigger_version AND `trigger_version` <= :max_trigger_version".with(params! {
         "world_id" => world_id,
@@ -67,6 +68,7 @@ async fn get_alerts_for_world_item(
                 discord_webhook,
                 trigger,
             };
+            // TODO: Don't unwrap this
             let alert_trigger: AlertTrigger = serde_json::from_str(&alert.trigger).unwrap();
             (alert, alert_trigger)
         })
@@ -87,6 +89,7 @@ async fn send_discord_message(
 ) -> Result<()> {
     let item = get_item(item_id, &client).await?;
     let market_url = get_universalis_url(item_id);
+    // TODO: Don't unwrap this
     let discord_webhook = alert.discord_webhook.as_ref().unwrap();
     let embed_title = format!("Alert triggered for {}", item.name);
     let embed_description = format!("One of your alerts has been triggered for the following reason(s):\n```c\n{}\n\nValue: {}```\nYou can view the item page on Universalis by clicking [this link]({}).", trigger, trigger_result, market_url);
@@ -121,12 +124,19 @@ async fn send_discord_message(
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // TODO: Enable tokio tracing
+    // TODO: Add metrics
+    // TODO: Add logging
+
+    // TODO: Make this env
     let database_url = "mysql://dalamud:dalamud@localhost:4003/dalamud";
     let pool = Pool::new(database_url);
 
+    // TODO: Make this env
     let connect_addr = "wss://universalis.app/api/ws";
     let url = url::Url::parse(&connect_addr)?;
 
+    // TODO: Attempt to reconnect when the connection drops?
     let (ws_stream, _) = connect_async(url).await?;
     println!("WebSocket handshake has been successfully completed");
 
@@ -134,17 +144,21 @@ async fn main() -> Result<()> {
 
     let event = SubscribeEvent {
         event: "subscribe",
+        // TODO: Make this env
         channel: "listings/add{world=74}",
     };
     let serialized = bson::to_bson(&event)?;
     let mut v: Vec<u8> = Vec::new();
+    // TODO: Don't unwrap this
     serialized.as_document().unwrap().to_writer(&mut v)?;
 
+    // TODO: Ping the connection so it doesn't die
     write.send(Message::Binary(v)).await?;
 
     let client = reqwest::Client::new();
     let on_message = {
-        read.for_each(|message| async {
+        read.for_each_concurrent(None, |message| async {
+            // TODO: Don't unwrap these
             let data = message.unwrap().into_data();
             let mut reader = Cursor::new(data.clone());
             let document = Document::from_reader(&mut reader).unwrap();
