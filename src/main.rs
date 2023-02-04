@@ -38,6 +38,12 @@ struct Item {
     name: String,
 }
 
+#[derive(Deserialize, Debug, Clone)]
+struct World {
+    #[serde(rename = "Name")]
+    name: String,
+}
+
 #[derive(Debug)]
 struct UserAlert {
     name: String,
@@ -47,6 +53,14 @@ struct UserAlert {
 
 async fn get_item(id: i32, client: &Client) -> Result<Item> {
     let url = format!("https://xivapi.com/Item/{}?columns=Name", id);
+    let res = client.get(url).send().await?;
+    let response_text = res.text().await?;
+    let item = serde_json::from_str(&response_text)?;
+    Ok(item)
+}
+
+async fn get_world(id: i32, client: &Client) -> Result<World> {
+    let url = format!("https://xivapi.com/World/{}?columns=Name", id);
     let res = client.get(url).send().await?;
     let response_text = res.text().await?;
     let item = serde_json::from_str(&response_text)?;
@@ -86,16 +100,22 @@ fn get_universalis_url(item_id: i32) -> String {
 
 async fn send_discord_message(
     item_id: i32,
+    world_id: i32,
     alert: &UserAlert,
     trigger: &AlertTrigger,
     trigger_result: f32,
     client: &Client,
 ) -> Result<()> {
+    let discord_webhook = alert.discord_webhook.as_ref();
+    if discord_webhook.is_none() {
+        return Ok(());
+    }
+    let discord_webhook = discord_webhook.unwrap();
+
     let item = get_item(item_id, &client).await?;
+    let world = get_world(world_id, &client).await?;
     let market_url = get_universalis_url(item_id);
-    // TODO: Don't unwrap this
-    let discord_webhook = alert.discord_webhook.as_ref().unwrap();
-    let embed_title = format!("Alert triggered for {}", item.name);
+    let embed_title = format!("Alert triggered for {} on {}", item.name, world.name);
     let embed_footer_text = format!("universalis.app | {} | All prices include GST", alert.name);
     let embed_description = format!("One of your alerts has been triggered for the following reason(s):\n```c\n{}\n\nValue: {}```\nYou can view the item page on Universalis by clicking [this link]({}).", trigger, trigger_result, market_url);
     let payload = DiscordWebhookPayload {
@@ -180,6 +200,7 @@ async fn main() -> Result<()> {
                 // Send webhook message
                 send_discord_message(
                     ev.item_id,
+                    ev.world_id,
                     &alert,
                     &trigger,
                     trigger_result.unwrap(),
