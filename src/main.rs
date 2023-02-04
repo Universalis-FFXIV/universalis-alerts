@@ -170,23 +170,15 @@ async fn main() -> Result<()> {
                 .await
                 .unwrap();
             for (alert, trigger) in alerts {
-                // Check if all trigger conditions are met
-                let trigger_result = trigger.evaluate(&ev.listings);
-                if trigger_result.is_none() {
-                    continue;
-                }
-
-                // Send webhook message
-                send_discord_message(
-                    ev.item_id,
-                    ev.world_id,
-                    &alert,
-                    &trigger,
-                    trigger_result.unwrap(),
-                    &client,
-                )
-                .await
-                .unwrap();
+                // Send webhook message if all trigger conditions are met
+                trigger
+                    .evaluate(&ev.listings)
+                    .map(|tr| {
+                        send_discord_message(ev.item_id, ev.world_id, &alert, &trigger, tr, &client)
+                    })
+                    .unwrap()
+                    .await
+                    .unwrap();
             }
         })
     };
