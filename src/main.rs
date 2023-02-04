@@ -131,6 +131,30 @@ fn serialize_event(ev: &SubscribeEvent) -> Result<Vec<u8>> {
         })
 }
 
+async fn process(message: Message, pool: &Pool, client: &Client) -> Result<()> {
+    // Parse the message into an event
+    let data = message.into_data();
+    let ev = parse_event_from_message(&data)?;
+
+    // Fetch all matching alerts from the database
+    let alerts = get_alerts_for_world_item(ev.world_id, ev.item_id, &pool).await?;
+    for (alert, trigger) in alerts {
+        // Send webhook message if all trigger conditions are met
+        let sent = trigger
+            .evaluate(&ev.listings)
+            .map(|tr| send_discord_message(ev.item_id, ev.world_id, &alert, &trigger, tr, &client));
+
+        // Log any errors that happened while sending the message
+        if let Some(s) = sent {
+            if let Err(err) = s.await {
+                println!("{:?}", err);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv().ok();
@@ -164,30 +188,12 @@ async fn main() -> Result<()> {
     let client = reqwest::Client::new();
     let on_message = {
         read.for_each_concurrent(None, |message| async {
-            // TODO: Don't unwrap these
-            let ev = message
-                .chain_err(|| "failed to receive websocket message")
-                .map(|m| m.into_data())
-                .and_then(|data| parse_event_from_message(&data));
-            if let Err(err) = ev {
+            let result = match message {
+                Ok(m) => process(m, &pool, &client).await,
+                Err(err) => Err(ErrorKind::Tungstenite(err).into()),
+            };
+            if let Err(err) = result {
                 println!("{:?}", err);
-                return;
-            }
-            let ev = ev.unwrap();
-
-            let alerts = get_alerts_for_world_item(ev.world_id, ev.item_id, &pool)
-                .await
-                .unwrap();
-            for (alert, trigger) in alerts {
-                // Send webhook message if all trigger conditions are met
-                trigger
-                    .evaluate(&ev.listings)
-                    .map(|tr| {
-                        send_discord_message(ev.item_id, ev.world_id, &alert, &trigger, tr, &client)
-                    })
-                    .unwrap()
-                    .await
-                    .unwrap();
             }
         })
     };
