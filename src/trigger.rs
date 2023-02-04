@@ -50,7 +50,7 @@ impl TriggerMapOp<Listing, f32> for TriggerMapper {
             // Apply GST
             Self::UnitPrice => (listing.unit_price as f32 * 1.05).ceil(),
             Self::Quantity => listing.quantity as f32,
-            Self::Total => ((listing.unit_price * listing.quantity) as f32 * 1.05).ceil(),
+            Self::Total => (listing.total as f32 * 1.05).ceil(),
         }
     }
 }

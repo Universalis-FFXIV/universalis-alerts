@@ -5,6 +5,7 @@ use crate::discord::*;
 use crate::trigger::*;
 use crate::universalis::*;
 use bson::Document;
+use dotenv::dotenv;
 use error_chain::error_chain;
 use futures_util::{pin_mut, SinkExt, StreamExt};
 use mysql_async::{params, prelude::*, Pool};
@@ -94,8 +95,11 @@ async fn get_alerts_for_world_item(
     Ok(alerts)
 }
 
-fn get_universalis_url(item_id: i32) -> String {
-    format!("https://universalis.app/market/{}", item_id)
+fn get_universalis_url(item_id: i32, world_name: &str) -> String {
+    format!(
+        "https://universalis.app/market/{}?server={}",
+        item_id, world_name
+    )
 }
 
 async fn send_discord_message(
@@ -114,7 +118,7 @@ async fn send_discord_message(
 
     let item = get_item(item_id, &client).await?;
     let world = get_world(world_id, &client).await?;
-    let market_url = get_universalis_url(item_id);
+    let market_url = get_universalis_url(item_id, &world.name);
     let embed_title = format!("Alert triggered for {} on {}", item.name, world.name);
     let embed_footer_text = format!("universalis.app | {} | All prices include GST", alert.name);
     let embed_description = format!("One of your alerts has been triggered for the following reason(s):\n```c\n{}\n\nValue: {}```\nYou can view the item page on Universalis by clicking [this link]({}).", trigger, trigger_result, market_url);
@@ -149,6 +153,8 @@ async fn send_discord_message(
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenv().ok();
+
     // TODO: Enable tokio tracing
     // TODO: Add metrics
     // TODO: Add logging
