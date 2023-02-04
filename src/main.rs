@@ -77,8 +77,8 @@ async fn send_discord_message(
     }
     let discord_webhook = discord_webhook.unwrap();
 
-    let item = get_item(item_id, &client).await?;
-    let world = get_world(world_id, &client).await?;
+    let item = get_item(item_id).await?;
+    let world = get_world(world_id).await?;
     let market_url = get_universalis_url(item_id, &world.name);
     let embed_title = format!("Alert triggered for {} on {}", item.name, world.name);
     let embed_footer_text = format!("universalis.app | {} | All prices include GST", alert.name);
