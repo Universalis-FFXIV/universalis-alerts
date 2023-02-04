@@ -34,6 +34,10 @@ impl Display for TriggerFilter {
 enum TriggerMapper {
     #[serde(rename = "pricePerUnit")]
     UnitPrice,
+    #[serde(rename = "quantity")]
+    Quantity,
+    #[serde(rename = "total")]
+    Total,
 }
 
 trait TriggerMapOp<TItem, TResult> {
@@ -45,6 +49,8 @@ impl TriggerMapOp<Listing, f32> for TriggerMapper {
         match self {
             // Apply GST
             Self::UnitPrice => (listing.unit_price as f32 * 1.05).ceil(),
+            Self::Quantity => listing.quantity as f32,
+            Self::Total => ((listing.unit_price * listing.quantity) as f32 * 1.05).ceil(),
         }
     }
 }
@@ -53,6 +59,8 @@ impl Display for TriggerMapper {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         match self {
             Self::UnitPrice => f.write_str("Unit price"),
+            Self::Quantity => f.write_str("Quantity"),
+            Self::Total => f.write_str("Total"),
         }
     }
 }

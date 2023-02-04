@@ -10,6 +10,7 @@ pub struct SubscribeEvent<'a> {
 pub struct Listing {
     #[serde(rename = "pricePerUnit")]
     pub unit_price: i32,
+    pub quantity: i32,
     pub hq: bool,
 }
 

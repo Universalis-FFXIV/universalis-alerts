@@ -96,7 +96,7 @@ async fn send_discord_message(
     // TODO: Don't unwrap this
     let discord_webhook = alert.discord_webhook.as_ref().unwrap();
     let embed_title = format!("Alert triggered for {}", item.name);
-    let embed_footer_text = format!("universalis.app | {}", alert.name);
+    let embed_footer_text = format!("universalis.app | {} | All prices include GST", alert.name);
     let embed_description = format!("One of your alerts has been triggered for the following reason(s):\n```c\n{}\n\nValue: {}```\nYou can view the item page on Universalis by clicking [this link]({}).", trigger, trigger_result, market_url);
     let payload = DiscordWebhookPayload {
         embeds: [DiscordEmbed {
