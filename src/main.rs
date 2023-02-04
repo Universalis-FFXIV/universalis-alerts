@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate log;
+
 use std::env;
 use std::io::Cursor;
 
@@ -52,8 +55,10 @@ async fn get_alerts_for_world_item(
             let alert_trigger = serde_json::from_str::<AlertTrigger>(&alert.trigger);
             match alert_trigger {
                 Ok(at) => Some((alert, at)),
-                // TODO: Log this error
-                Err(_) => None
+                Err(err) => {
+                    error!("{:?}", err);
+                    None
+                }
             }
         })
         .await?
@@ -154,7 +159,7 @@ async fn process(message: Message, pool: &Pool, client: &Client) -> Result<()> {
         // Log any errors that happened while sending the message
         if let Some(s) = sent {
             if let Err(err) = s.await {
-                println!("{:?}", err);
+                error!("{:?}", err);
             }
         }
     }
@@ -163,8 +168,9 @@ async fn process(message: Message, pool: &Pool, client: &Client) -> Result<()> {
 }
 
 async fn connect_and_process(url: url::Url, pool: &Pool) -> Result<()> {
+    info!("Connecting to WebSocket server at {}", url);
     let (ws_stream, _) = connect_async(url).await?;
-    println!("WebSocket handshake has been successfully completed");
+    info!("WebSocket handshake completed");
 
     let (mut write, read) = ws_stream.split();
 
@@ -186,7 +192,7 @@ async fn connect_and_process(url: url::Url, pool: &Pool) -> Result<()> {
                 Err(err) => Err(ErrorKind::Tungstenite(err).into()),
             };
             if let Err(err) = result {
-                println!("{:?}", err);
+                error!("{:?}", err);
             }
         })
     };
@@ -201,9 +207,15 @@ async fn connect_and_process(url: url::Url, pool: &Pool) -> Result<()> {
 async fn main() -> Result<()> {
     dotenv().ok();
 
+    // Configure logging; set the log level to info
+    // if not specified.
+    if let Err(_) = env::var("RUST_LOG") {
+        env::set_var("RUST_LOG", "info")
+    }
+    env_logger::init();
+
     // TODO: Enable tokio tracing
     // TODO: Add metrics
-    // TODO: Add logging
 
     let database_url =
         env::var("UNIVERSALIS_ALERTS_DB").chain_err(|| "UNIVERSALIS_ALERTS_DB not set")?;
@@ -214,7 +226,7 @@ async fn main() -> Result<()> {
     let url = url::Url::parse(&connect_addr).chain_err(|| "failed to parse server address")?;
 
     while let Err(err) = connect_and_process(url.clone(), &pool).await {
-        println!("{:?}", err)
+        error!("{:?}", err)
     }
 
     Ok(())
