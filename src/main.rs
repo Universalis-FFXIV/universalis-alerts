@@ -75,7 +75,7 @@ async fn get_alerts_for_world_item(
 ) -> Result<Vec<(UserAlert, AlertTrigger)>> {
     // TODO: Add caching for this?
     let mut conn = pool.get_conn().await?;
-    let alerts = r"SELECT `name`, `discord_webhook`, `trigger` FROM `users_alerts_next` WHERE `world_id` = :world_id AND `item_id` = :item_id AND `trigger_version` >= :min_trigger_version AND `trigger_version` <= :max_trigger_version".with(params! {
+    let alerts = r"SELECT `name`, `discord_webhook`, `trigger` FROM `users_alerts_next` WHERE `world_id` = :world_id AND (`item_id` = :item_id OR `item_id` = -1) AND `trigger_version` >= :min_trigger_version AND `trigger_version` <= :max_trigger_version".with(params! {
         "world_id" => world_id,
         "item_id" => item_id,
         "min_trigger_version" => MIN_TRIGGER_VERSION,
@@ -193,7 +193,7 @@ async fn main() -> Result<()> {
             let document = Document::from_reader(&mut reader).unwrap();
             let ev: ListingsAddEvent = bson::from_bson(document.into()).unwrap();
 
-            let alerts = get_alerts_for_world_item(ev.world_id, 5, &pool)
+            let alerts = get_alerts_for_world_item(ev.world_id, ev.item_id, &pool)
                 .await
                 .unwrap();
             for (alert, trigger) in alerts {
