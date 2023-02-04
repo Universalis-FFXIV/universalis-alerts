@@ -199,8 +199,12 @@ async fn main() -> Result<()> {
             let ev = message
                 .chain_err(|| "failed to receive websocket message")
                 .map(|m| m.into_data())
-                .and_then(|data| parse_event_from_message(&data))
-                .unwrap();
+                .and_then(|data| parse_event_from_message(&data));
+            if let Err(err) = ev {
+                println!("{:?}", err);
+                return;
+            }
+            let ev = ev.unwrap();
 
             let alerts = get_alerts_for_world_item(ev.world_id, ev.item_id, &pool)
                 .await
