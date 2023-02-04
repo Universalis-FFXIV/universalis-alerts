@@ -119,6 +119,18 @@ fn parse_event_from_message(data: &[u8]) -> Result<ListingsAddEvent> {
     Ok(ev)
 }
 
+fn serialize_event(ev: &SubscribeEvent) -> Result<Vec<u8>> {
+    let serialized = bson::to_bson(&ev)?;
+    let mut v: Vec<u8> = Vec::new();
+    serialized
+        .clone()
+        .as_document()
+        .map_or(Err(ErrorKind::NotADocument(serialized).into()), |d| {
+            d.to_writer(&mut v)?;
+            Ok(v)
+        })
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv().ok();
@@ -144,13 +156,10 @@ async fn main() -> Result<()> {
         event: "subscribe",
         channel: &env::var("UNIVERSALIS_ALERTS_CHANNEL")?,
     };
-    let serialized = bson::to_bson(&event)?;
-    let mut v: Vec<u8> = Vec::new();
-    // TODO: Don't unwrap this
-    serialized.as_document().unwrap().to_writer(&mut v)?;
+    let serialized = serialize_event(&event)?;
 
     // TODO: Ping the connection so it doesn't die
-    write.send(Message::Binary(v)).await?;
+    write.send(Message::Binary(serialized)).await?;
 
     let client = reqwest::Client::new();
     let on_message = {

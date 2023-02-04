@@ -12,4 +12,11 @@ error_chain! {
         Database(mysql_async::Error);
         Env(std::env::VarError);
     }
+
+    errors {
+        NotADocument(b: bson::Bson) {
+            description("not a document"),
+            display("not a document: {}", b),
+        }
+    }
 }
