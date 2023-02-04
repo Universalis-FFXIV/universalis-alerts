@@ -9,6 +9,7 @@ use crate::xivapi::*;
 use bson::Document;
 use dotenv::dotenv;
 use futures_util::{pin_mut, SinkExt, StreamExt};
+use itertools::Itertools;
 use mysql_async::{params, prelude::*, Pool};
 use reqwest::Client;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
@@ -48,11 +49,17 @@ async fn get_alerts_for_world_item(
                 discord_webhook,
                 trigger,
             };
-            // TODO: Don't unwrap this
-            let alert_trigger: AlertTrigger = serde_json::from_str(&alert.trigger).unwrap();
-            (alert, alert_trigger)
+            let alert_trigger = serde_json::from_str::<AlertTrigger>(&alert.trigger);
+            match alert_trigger {
+                Ok(at) => Some((alert, at)),
+                // TODO: Log this error
+                Err(_) => None
+            }
         })
-        .await?;
+        .await?
+        .into_iter()
+        .filter_map(|t| t)
+        .collect_vec();
     Ok(alerts)
 }
 
