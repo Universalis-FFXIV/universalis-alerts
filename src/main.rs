@@ -170,7 +170,8 @@ async fn connect_and_process(url: url::Url, pool: &Pool) -> Result<()> {
 
     let event = SubscribeEvent {
         event: "subscribe",
-        channel: &env::var("UNIVERSALIS_ALERTS_CHANNEL")?,
+        channel: &env::var("UNIVERSALIS_ALERTS_CHANNEL")
+            .chain_err(|| "UNIVERSALIS_ALERTS_CHANNEL not set")?,
     };
     let serialized = serialize_event(&event)?;
 
@@ -203,13 +204,14 @@ async fn main() -> Result<()> {
     // TODO: Enable tokio tracing
     // TODO: Add metrics
     // TODO: Add logging
-    // TODO: Log failures instead of just yeeting errors
 
-    let database_url = env::var("UNIVERSALIS_ALERTS_DB")?;
+    let database_url =
+        env::var("UNIVERSALIS_ALERTS_DB").chain_err(|| "UNIVERSALIS_ALERTS_DB not set")?;
     let pool = Pool::new(database_url.as_str());
 
-    let connect_addr = env::var("UNIVERSALIS_ALERTS_WS")?;
-    let url = url::Url::parse(&connect_addr)?;
+    let connect_addr =
+        env::var("UNIVERSALIS_ALERTS_WS").chain_err(|| "UNIVERSALIS_ALERTS_WS not set")?;
+    let url = url::Url::parse(&connect_addr).chain_err(|| "failed to parse server address")?;
 
     while let Err(err) = connect_and_process(url.clone(), &pool).await {
         println!("{:?}", err)
