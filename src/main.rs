@@ -2,71 +2,31 @@ use std::env;
 use std::io::Cursor;
 
 use crate::discord::*;
+use crate::errors::*;
 use crate::trigger::*;
 use crate::universalis::*;
+use crate::xivapi::*;
 use bson::Document;
 use dotenv::dotenv;
-use error_chain::error_chain;
 use futures_util::{pin_mut, SinkExt, StreamExt};
 use mysql_async::{params, prelude::*, Pool};
 use reqwest::Client;
-use serde::Deserialize;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 mod discord;
+mod errors;
 mod trigger;
 mod universalis;
-
-error_chain! {
-    foreign_links {
-        Io(std::io::Error);
-        HttpRequest(reqwest::Error);
-        Url(url::ParseError);
-        Tungstenite(tungstenite::Error);
-        BsonDe(bson::de::Error);
-        BsonSer(bson::ser::Error);
-        Json(serde_json::Error);
-        Database(mysql_async::Error);
-        Env(std::env::VarError);
-    }
-}
+mod xivapi;
 
 const MIN_TRIGGER_VERSION: i32 = 0;
 const MAX_TRIGGER_VERSION: i32 = 0;
-
-#[derive(Deserialize, Debug, Clone)]
-struct Item {
-    #[serde(rename = "Name")]
-    name: String,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-struct World {
-    #[serde(rename = "Name")]
-    name: String,
-}
 
 #[derive(Debug)]
 struct UserAlert {
     name: String,
     discord_webhook: Option<String>,
     trigger: String,
-}
-
-async fn get_item(id: i32, client: &Client) -> Result<Item> {
-    let url = format!("https://xivapi.com/Item/{}?columns=Name", id);
-    let res = client.get(url).send().await?;
-    let response_text = res.text().await?;
-    let item = serde_json::from_str(&response_text)?;
-    Ok(item)
-}
-
-async fn get_world(id: i32, client: &Client) -> Result<World> {
-    let url = format!("https://xivapi.com/World/{}?columns=Name", id);
-    let res = client.get(url).send().await?;
-    let response_text = res.text().await?;
-    let item = serde_json::from_str(&response_text)?;
-    Ok(item)
 }
 
 async fn get_alerts_for_world_item(
