@@ -40,6 +40,7 @@ struct Item {
 
 #[derive(Debug)]
 struct UserAlert {
+    name: String,
     discord_webhook: Option<String>,
     trigger: String,
 }
@@ -59,14 +60,15 @@ async fn get_alerts_for_world_item(
 ) -> Result<Vec<(UserAlert, AlertTrigger)>> {
     // TODO: Add caching for this?
     let mut conn = pool.get_conn().await?;
-    let alerts = r"SELECT `discord_webhook`, `trigger` FROM `users_alerts_next` WHERE `world_id` = :world_id AND `item_id` = :item_id AND `trigger_version` >= :min_trigger_version AND `trigger_version` <= :max_trigger_version".with(params! {
+    let alerts = r"SELECT `name`, `discord_webhook`, `trigger` FROM `users_alerts_next` WHERE `world_id` = :world_id AND `item_id` = :item_id AND `trigger_version` >= :min_trigger_version AND `trigger_version` <= :max_trigger_version".with(params! {
         "world_id" => world_id,
         "item_id" => item_id,
         "min_trigger_version" => MIN_TRIGGER_VERSION,
         "max_trigger_version" => MAX_TRIGGER_VERSION,
     })
-        .map(&mut conn, |(discord_webhook, trigger)| {
+        .map(&mut conn, |(name, discord_webhook, trigger)| {
             let alert = UserAlert {
+                name,
                 discord_webhook,
                 trigger,
             };
@@ -94,6 +96,7 @@ async fn send_discord_message(
     // TODO: Don't unwrap this
     let discord_webhook = alert.discord_webhook.as_ref().unwrap();
     let embed_title = format!("Alert triggered for {}", item.name);
+    let embed_footer_text = format!("universalis.app | {}", alert.name);
     let embed_description = format!("One of your alerts has been triggered for the following reason(s):\n```c\n{}\n\nValue: {}```\nYou can view the item page on Universalis by clicking [this link]({}).", trigger, trigger_result, market_url);
     let payload = DiscordWebhookPayload {
         embeds: [DiscordEmbed {
@@ -102,7 +105,7 @@ async fn send_discord_message(
             description: &embed_description,
             color: 0xBD983A,
             footer: DiscordEmbedFooter {
-                text: "universalis.app",
+                text: &embed_footer_text,
                 icon_url: "https://universalis.app/favicon.png",
             },
             author: DiscordEmbedAuthor {
