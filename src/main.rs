@@ -162,22 +162,7 @@ async fn process(message: Message, pool: &Pool, client: &Client) -> Result<()> {
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    dotenv().ok();
-
-    // TODO: Enable tokio tracing
-    // TODO: Add metrics
-    // TODO: Add logging
-    // TODO: Log failures instead of just yeeting errors
-
-    let database_url = env::var("UNIVERSALIS_ALERTS_DB")?;
-    let pool = Pool::new(database_url.as_str());
-
-    let connect_addr = env::var("UNIVERSALIS_ALERTS_WS")?;
-    let url = url::Url::parse(&connect_addr)?;
-
-    // TODO: Attempt to reconnect when the connection drops?
+async fn connect_and_process(url: url::Url, pool: &Pool) -> Result<()> {
     let (ws_stream, _) = connect_async(url).await?;
     println!("WebSocket handshake has been successfully completed");
 
@@ -207,6 +192,28 @@ async fn main() -> Result<()> {
 
     pin_mut!(on_message);
     on_message.await;
+
+    Err(ErrorKind::ConnectionClosed("the connection was closed".to_owned()).into())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    dotenv().ok();
+
+    // TODO: Enable tokio tracing
+    // TODO: Add metrics
+    // TODO: Add logging
+    // TODO: Log failures instead of just yeeting errors
+
+    let database_url = env::var("UNIVERSALIS_ALERTS_DB")?;
+    let pool = Pool::new(database_url.as_str());
+
+    let connect_addr = env::var("UNIVERSALIS_ALERTS_WS")?;
+    let url = url::Url::parse(&connect_addr)?;
+
+    while let Err(err) = connect_and_process(url.clone(), &pool).await {
+        println!("{:?}", err)
+    }
 
     Ok(())
 }

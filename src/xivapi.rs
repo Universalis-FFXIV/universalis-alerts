@@ -14,6 +14,9 @@ pub struct World {
     pub name: String,
 }
 
+// Unfortunately, it's not possible to reuse the client here,
+// since the function arguments are being used as a cache key.
+
 #[cached(size = 500, time = 60, result = true)]
 pub async fn get_item(id: i32) -> Result<Item> {
     let url = format!("https://xivapi.com/Item/{}?columns=Name", id);

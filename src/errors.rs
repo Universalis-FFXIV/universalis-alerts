@@ -18,5 +18,10 @@ error_chain! {
             description("not a document"),
             display("not a document: {}", b),
         }
+
+        ConnectionClosed(msg: String) {
+            description("connection closed"),
+            display("connection closed: {}", msg),
+        }
     }
 }
