@@ -23,7 +23,8 @@ error_chain! {
         HttpRequest(reqwest::Error);
         Url(url::ParseError);
         Tungstenite(tungstenite::Error);
-        Bson(bson::ser::Error);
+        BsonDe(bson::de::Error);
+        BsonSer(bson::ser::Error);
         Json(serde_json::Error);
         Database(mysql_async::Error);
         Env(std::env::VarError);
@@ -151,6 +152,13 @@ async fn send_discord_message(
     Ok(())
 }
 
+fn parse_event_from_message(data: &[u8]) -> Result<ListingsAddEvent> {
+    let mut reader = Cursor::new(data.clone());
+    let document = Document::from_reader(&mut reader)?;
+    let ev: ListingsAddEvent = bson::from_bson(document.into())?;
+    Ok(ev)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv().ok();
@@ -188,10 +196,11 @@ async fn main() -> Result<()> {
     let on_message = {
         read.for_each_concurrent(None, |message| async {
             // TODO: Don't unwrap these
-            let data = message.unwrap().into_data();
-            let mut reader = Cursor::new(data.clone());
-            let document = Document::from_reader(&mut reader).unwrap();
-            let ev: ListingsAddEvent = bson::from_bson(document.into()).unwrap();
+            let ev = message
+                .chain_err(|| "failed to receive websocket message")
+                .map(|m| m.into_data())
+                .and_then(|data| parse_event_from_message(&data))
+                .unwrap();
 
             let alerts = get_alerts_for_world_item(ev.world_id, ev.item_id, &pool)
                 .await
