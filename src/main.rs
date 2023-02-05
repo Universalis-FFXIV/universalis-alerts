@@ -13,6 +13,8 @@ use bson::Document;
 use dotenv::dotenv;
 use futures_util::{pin_mut, SinkExt, StreamExt};
 use itertools::Itertools;
+use metrics::counter;
+use metrics_exporter_prometheus::PrometheusBuilder;
 use mysql_async::{params, prelude::*, Pool};
 use reqwest::Client;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
@@ -149,18 +151,28 @@ async fn process(message: Message, pool: &Pool, client: &Client) -> Result<()> {
     let ev = parse_event_from_message(&data)?;
 
     // Fetch all matching alerts from the database
-    let alerts = get_alerts_for_world_item(ev.world_id, ev.item_id, &pool).await?;
-    for (alert, trigger) in alerts {
-        // Send webhook message if all trigger conditions are met
-        let sent = trigger
-            .evaluate(&ev.listings)
-            .map(|tr| send_discord_message(ev.item_id, ev.world_id, &alert, &trigger, tr, &client));
+    let alerts = get_alerts_for_world_item(ev.world_id, ev.item_id, &pool)
+        .await?
+        .into_iter()
+        .filter_map(|(alert, trigger)| {
+            // Evaluate if all trigger conditions were met
+            let trigger_result = trigger.evaluate(&ev.listings);
+            match trigger_result {
+                Some(tr) => Some((alert, trigger, tr)),
+                None => None,
+            }
+        })
+        .collect_vec();
+    counter!("universalis_alerts_matched", alerts.len() as u64);
+
+    // Send Discord notifications for each matching trigger
+    for (alert, trigger, tr) in alerts {
+        let sent =
+            send_discord_message(ev.item_id, ev.world_id, &alert, &trigger, tr, &client).await;
 
         // Log any errors that happened while sending the message
-        if let Some(s) = sent {
-            if let Err(err) = s.await {
-                error!("{:?}", err);
-            }
+        if let Err(err) = sent {
+            error!("{:?}", err);
         }
     }
 
@@ -188,8 +200,14 @@ async fn connect_and_process(url: url::Url, pool: &Pool) -> Result<()> {
     let on_message = {
         read.for_each_concurrent(None, |message| async {
             let result = match message {
-                Ok(m) => process(m, &pool, &client).await,
-                Err(err) => Err(ErrorKind::Tungstenite(err).into()),
+                Ok(m) => {
+                    counter!("universalis_alerts_ws_messages_recieved", 1);
+                    process(m, &pool, &client).await
+                }
+                Err(err) => {
+                    counter!("universalis_alerts_ws_errors", 1);
+                    Err(ErrorKind::Tungstenite(err).into())
+                }
             };
             if let Err(err) = result {
                 error!("{:?}", err);
@@ -214,8 +232,13 @@ async fn main() -> Result<()> {
     }
     env_logger::init();
 
+    // Configure metrics
+    let metrics_builder = PrometheusBuilder::new();
+    metrics_builder
+        .install()
+        .chain_err(|| "failed to install metrics exporter")?;
+
     // TODO: Enable tokio tracing
-    // TODO: Add metrics
 
     let database_url =
         env::var("UNIVERSALIS_ALERTS_DB").chain_err(|| "UNIVERSALIS_ALERTS_DB not set")?;
@@ -226,6 +249,7 @@ async fn main() -> Result<()> {
     let url = url::Url::parse(&connect_addr).chain_err(|| "failed to parse server address")?;
 
     while let Err(err) = connect_and_process(url.clone(), &pool).await {
+        counter!("universalis_alerts_ws_closes", 1);
         error!("{:?}", err)
     }
 

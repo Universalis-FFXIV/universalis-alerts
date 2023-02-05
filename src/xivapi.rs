@@ -1,5 +1,6 @@
 use crate::errors::*;
 use cached::proc_macro::cached;
+use metrics::counter;
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -26,6 +27,8 @@ pub async fn get_item(id: i32) -> Result<Item> {
     let response_text = res.text().await?;
     let item = serde_json::from_str(&response_text)?;
 
+    counter!("universalis_alerts_xivapi_requests", 1);
+
     Ok(item)
 }
 
@@ -37,6 +40,8 @@ pub async fn get_world(id: i32) -> Result<World> {
     let res = client.get(url).send().await?;
     let response_text = res.text().await?;
     let world = serde_json::from_str(&response_text)?;
+
+    counter!("universalis_alerts_xivapi_requests", 1);
 
     Ok(world)
 }

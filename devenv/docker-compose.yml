@@ -11,3 +11,17 @@ services:
       MYSQL_PASSWORD: dalamud
     volumes:
       - ./sqlinit:/docker-entrypoint-initdb.d
+  grafana:
+    image: "grafana/grafana:9.1.0"
+    ports:
+      - "3000:3000"
+  victoria:
+    image: "victoriametrics/victoria-metrics:v1.79.5"
+    command:
+      - "-promscrape.config=/prometheus.yml"
+    volumes:
+      - "./prometheus.yml:/prometheus.yml"
+    ports:
+      - "8428:8428"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
