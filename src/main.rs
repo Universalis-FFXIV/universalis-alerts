@@ -2,14 +2,12 @@
 extern crate log;
 
 use std::env;
-use std::io::Cursor;
 
 use crate::discord::*;
 use crate::errors::*;
 use crate::trigger::*;
 use crate::universalis::*;
 use crate::xivapi::*;
-use bson::Document;
 use dotenv::dotenv;
 use futures_util::{pin_mut, SinkExt, StreamExt};
 use itertools::Itertools;
@@ -127,9 +125,7 @@ async fn send_discord_message(
 }
 
 fn parse_event_from_message(data: &[u8]) -> Result<ListingsAddEvent> {
-    let mut reader = Cursor::new(data.clone());
-    let document = Document::from_reader(&mut reader)?;
-    let ev: ListingsAddEvent = bson::from_bson(document.into())?;
+    let ev: ListingsAddEvent = bson::from_slice(data)?;
     Ok(ev)
 }
 
