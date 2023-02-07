@@ -14,8 +14,11 @@ use itertools::Itertools;
 use metrics::counter;
 use metrics_exporter_prometheus::PrometheusBuilder;
 use mysql_async::{params, prelude::*, Pool};
+use opentelemetry::global;
 use reqwest::Client;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 mod discord;
 mod errors;
@@ -28,11 +31,13 @@ const MAX_TRIGGER_VERSION: i32 = 0;
 
 #[derive(Debug)]
 struct UserAlert {
+    user_id: Option<String>,
     name: String,
     discord_webhook: Option<String>,
     trigger: String,
 }
 
+#[tracing::instrument(skip(pool))]
 async fn get_alerts_for_world_item(
     world_id: i32,
     item_id: i32,
@@ -40,14 +45,15 @@ async fn get_alerts_for_world_item(
 ) -> Result<Vec<(UserAlert, AlertTrigger)>> {
     // TODO: Add caching for this?
     let mut conn = pool.get_conn().await?;
-    let alerts = r"SELECT `name`, `discord_webhook`, `trigger` FROM `users_alerts_next` WHERE `world_id` = :world_id AND (`item_id` = :item_id OR `item_id` = -1) AND `trigger_version` >= :min_trigger_version AND `trigger_version` <= :max_trigger_version".with(params! {
+    let alerts = r"SELECT `user_id`, `name`, `discord_webhook`, `trigger` FROM `users_alerts_next` WHERE `world_id` = :world_id AND (`item_id` = :item_id OR `item_id` = -1) AND `trigger_version` >= :min_trigger_version AND `trigger_version` <= :max_trigger_version".with(params! {
         "world_id" => world_id,
         "item_id" => item_id,
         "min_trigger_version" => MIN_TRIGGER_VERSION,
         "max_trigger_version" => MAX_TRIGGER_VERSION,
     })
-        .map(&mut conn, |(name, discord_webhook, trigger)| {
+        .map(&mut conn, |(user_id, name, discord_webhook, trigger)| {
             let alert = UserAlert {
+                user_id,
                 name,
                 discord_webhook,
                 trigger,
@@ -75,6 +81,12 @@ fn get_universalis_url(item_id: i32, world_name: &str) -> String {
     )
 }
 
+#[tracing::instrument(
+    skip(alert, trigger, trigger_result, client),
+    fields(
+        user_id = alert.user_id.as_ref().unwrap_or(&"".to_string())
+    )
+)]
 async fn send_discord_message(
     item_id: i32,
     world_id: i32,
@@ -141,6 +153,7 @@ fn serialize_event(ev: &SubscribeEvent) -> Result<Vec<u8>> {
         })
 }
 
+#[tracing::instrument(skip(message, pool, client))]
 async fn process(message: Message, pool: &Pool, client: &Client) -> Result<()> {
     // Parse the message into an event
     let data = message.into_data();
@@ -234,7 +247,17 @@ async fn main() -> Result<()> {
         .install()
         .chain_err(|| "failed to install metrics exporter")?;
 
-    // TODO: Enable tokio tracing
+    // Configure tracing
+    global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
+    let tracer = opentelemetry_jaeger::new_pipeline()
+        .with_service_name("universalis_alerts")
+        .install_simple()
+        .chain_err(|| "failed to install span processor")?;
+    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+    tracing_subscriber::registry()
+        .with(opentelemetry)
+        .try_init()
+        .chain_err(|| "failed to install tracing subscriber")?;
 
     let database_url =
         env::var("UNIVERSALIS_ALERTS_DB").chain_err(|| "UNIVERSALIS_ALERTS_DB not set")?;
