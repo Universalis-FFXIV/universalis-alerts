@@ -248,8 +248,11 @@ async fn main() -> Result<()> {
         .chain_err(|| "failed to install metrics exporter")?;
 
     // Configure tracing
+    let jaeger_agent_url = env::var("UNIVERSALIS_ALERTS_JAEGER_AGENT")
+        .chain_err(|| "UNIVERSALIS_ALERTS_JAEGER_AGENT not set")?;
     global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
     let tracer = opentelemetry_jaeger::new_pipeline()
+        .with_agent_endpoint(jaeger_agent_url)
         .with_service_name("universalis_alerts")
         .install_simple()
         .chain_err(|| "failed to install span processor")?;
