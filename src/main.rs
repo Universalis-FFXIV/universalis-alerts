@@ -182,6 +182,7 @@ async fn process(message: Message, pool: &Pool, client: &Client) -> Result<()> {
         // Log any errors that happened while sending the message
         if let Err(err) = sent {
             error!("{:?}", err);
+            counter!("universalis_alerts_delivery_error", 1);
         }
     }
 
