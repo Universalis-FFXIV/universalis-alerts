@@ -14,8 +14,8 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release --bin universalis-alerts
 
-FROM debian:bullseye-slim AS runtime
+FROM debian:stable-slim AS runtime
 WORKDIR /app
-RUN apt update && apt install libssl1.1 ca-certificates -y
+RUN apt update && apt install openssl ca-certificates -y
 COPY --from=builder /app/target/release/universalis-alerts /usr/local/bin
 ENTRYPOINT ["/usr/local/bin/universalis-alerts"]
